@@ -4,7 +4,7 @@ import datetime
 import joblib
 
 # =====================
-# 🔹 Load Models & Encoders with exact filenames
+# 🔹 Load Models & Encoders
 # =====================
 priority_model = joblib.load("priority_xgboost (1).pkl")
 priority_label_encoder = joblib.load("priority_label_encoder (1).pkl")
@@ -12,7 +12,7 @@ priority_vectorizer = joblib.load("priority_tfidf_vectorizer (1).pkl")
 
 category_model = joblib.load("svm_task_classifier.joblib")
 category_label_encoder = joblib.load("svm_label_encoder.joblib")
-category_vectorizer = priority_vectorizer  # using same vectorizer for both
+category_vectorizer = joblib.load("task_tfidf_vectorizer.pkl")
 
 # =====================
 # 🔹 Load Dataset
@@ -26,7 +26,7 @@ df = load_data()
 # =====================
 # 🔹 Streamlit UI
 # =====================
-st.title("🧠 AI Task Assignment Dashboard (SVM + XGBoost)")
+st.title("🧠 AI Task Assignment Dashboard")
 
 with st.form("task_form"):
     task_desc = st.text_area("📝 Enter Task Description")
@@ -51,11 +51,11 @@ if submitted:
     days_left = (deadline - today).days
     urgency_score = max(0, 10 - days_left)
 
-    # 🔸 Group workload by user from dataset
+    # 🔸 Group workload by user
     user_workload_df = df.groupby("assigned_user")["user_current_load"].mean().reset_index()
     user_workload_df.rename(columns={"user_current_load": "avg_workload"}, inplace=True)
 
-    # 🔸 Filter users who handled predicted category
+    # 🔸 Filter users by category and workload
     matching_users = df[df["category"] == pred_category]["assigned_user"].unique()
     matching_users_filtered = user_workload_df[
         (user_workload_df["assigned_user"].isin(matching_users)) &
@@ -65,7 +65,8 @@ if submitted:
     matching_users_filtered["urgency_score"] = urgency_score
     matching_users_filtered["combined_score"] = matching_users_filtered["avg_workload"] + urgency_score
 
-    st.write("🕵️ Matching Users (Category + Load ≤ 20):")
+    # Show matching users
+    st.write("🕵️ Matching Users (category + workload ≤ 20):")
     st.dataframe(matching_users_filtered)
 
     if not matching_users_filtered.empty:
