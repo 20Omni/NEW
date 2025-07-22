@@ -1,58 +1,74 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import joblib
 import pickle
-from xgboost import XGBClassifier
-from sklearn.feature_extraction.text import TfidfVectorizer
+import requests
+from io import BytesIO
 
-# ==========================
-# 📥 Load all saved models
-# ==========================
-svm_model = joblib.load("svm_task_classifier.joblib")
-task_label_encoder = joblib.load("svm_label_encoder.joblib")
+# ===========
+# 🔽 Helper to load from GitHub
+# ===========
+def load_pickle_from_url(url):
+    response = requests.get(url)
+    return pickle.load(BytesIO(response.content))
 
-priority_model = pickle.load(open("priority_xgboost (1).pkl", "rb"))
-priority_vectorizer = pickle.load(open("priority_tfidf_vectorizer (1).pkl", "rb"))
-priority_label_encoder = pickle.load(open("priority_label_encoder (1).pkl", "rb"))
+def load_joblib_from_url(url):
+    response = requests.get(url)
+    return joblib.load(BytesIO(response.content))
 
-# ✅ Load dataset to use for assignment
-df = pd.read_csv("final_task_dataset_balanced.csv")
-latest_users = df[["assigned_user", "user_current_load"]].dropna().drop_duplicates()
+# ===========
+# 🌐 Load all models from GitHub repo
+# Replace with your raw GitHub links
+# ===========
 
-# ==========================
-# 🖥️ Streamlit UI
-# ==========================
-st.title("🤖 AI Task Classifier, Prioritizer & Assigner")
-st.write("Enter a task description to classify category, predict priority, and assign it to a user:")
+# SVM Category Classifier
+svm_model = load_joblib_from_url("https://raw.githubusercontent.com/your-username/your-repo/main/svm_task_classifier.joblib")
+category_encoder = load_joblib_from_url("https://raw.githubusercontent.com/your-username/your-repo/main/svm_label_encoder.joblib")
 
-task_input = st.text_area("📝 Task Description")
+# XGBoost Priority Predictor
+priority_model = load_pickle_from_url("https://raw.githubusercontent.com/your-username/your-repo/main/priority_xgboost%20(1).pkl")
+priority_encoder = load_pickle_from_url("https://raw.githubusercontent.com/your-username/your-repo/main/priority_label_encoder%20(1).pkl")
+priority_vectorizer = load_pickle_from_url("https://raw.githubusercontent.com/your-username/your-repo/main/priority_tfidf_vectorizer%20(1).pkl")
 
-if st.button("🚀 Predict"):
-    if not task_input.strip():
+# ===========
+# 🧠 Dummy User Data (replace with your real user dataset if needed)
+# ===========
+users_df = pd.DataFrame({
+    "user_id": ["User_A", "User_B", "User_C"],
+    "current_load": [5, 3, 2]  # Example load
+})
+
+# ===========
+# 🚀 Streamlit UI
+# ===========
+st.set_page_config(page_title="AI Task Manager", layout="centered")
+st.title("🧠 AI Task Manager Dashboard")
+st.markdown("Type your task below and let AI predict its category, priority, and assign it to a user!")
+
+# ===========
+# 📥 Input
+# ===========
+task_description = st.text_area("📝 Enter Task Description")
+
+if st.button("Predict"):
+    if not task_description.strip():
         st.warning("Please enter a task description.")
     else:
-        # -----------------------------
-        # ✅ Category Prediction (SVM)
-        # -----------------------------
-        category_vector = priority_vectorizer.transform([task_input])  # same TF-IDF can be reused
-        category_encoded = svm_model.predict(category_vector)[0]
-        predicted_category = task_label_encoder.inverse_transform([category_encoded])[0]
+        # ===== TF-IDF for priority
+        priority_features = priority_vectorizer.transform([task_description])
+        predicted_priority = priority_model.predict(priority_features)[0]
+        predicted_priority_label = priority_encoder.inverse_transform([predicted_priority])[0]
 
-        # -----------------------------
-        # 🔺 Priority Prediction (XGBoost)
-        # -----------------------------
-        priority_vector = priority_vectorizer.transform([task_input])
-        priority_encoded = priority_model.predict(priority_vector)[0]
-        predicted_priority = priority_label_encoder.inverse_transform([priority_encoded])[0]
+        # ===== TF-IDF for category (same vectorizer assumed, or you can load another)
+        category_features = priority_vectorizer.transform([task_description])
+        predicted_category = svm_model.predict(category_features)[0]
+        predicted_category_label = category_encoder.inverse_transform([predicted_category])[0]
 
-        # -----------------------------
-        # 👤 User Assignment (based on load)
-        # -----------------------------
-        assigned_user = latest_users.loc[latest_users["user_current_load"].idxmin(), "assigned_user"]
+        # ===== Assign user with lowest workload
+        assigned_user = users_df.loc[users_df["current_load"].idxmin(), "user_id"]
 
-        # -----------------------------
-        # ✅ Output
-        # -----------------------------
-        st.success(f"📌 **Predicted Category:** `{predicted_category}`")
-        st.info(f"⏫ **Predicted Priority:** `{predicted_priority}`")
-        st.success(f"👤 **Assigned To:** `{assigned_user}`")
+        # ===== Display Output
+        st.success(f"✅ **Predicted Category**: {predicted_category_label}")
+        st.info(f"🚦 **Predicted Priority**: {predicted_priority_label}")
+        st.success(f"👤 **Assigned to**: {assigned_user}")
